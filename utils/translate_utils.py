@@ -1,6 +1,8 @@
 # utils/translate_utils.py
 import os
+import re
 import time
+import copy
 from litellm import completion
 from dotenv import load_dotenv
 from . import config
@@ -59,6 +61,8 @@ def array_to_srt(subtitle_array: list, subtitle_file: str):
             file.write('\n')  # 用空行分隔字幕
 
 def format_subtitle_text(text):
+    # 去掉<think>标签
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
     # 去除多余的空格和换行符
     text = text.strip()
     # 去除多余的空格
@@ -78,24 +82,52 @@ def translate_subtitle(subtitle_file, lang = DEFAULT_LANG):
     failed_count = 0
     success_count = 0
     # 翻译每条字幕
-    for subtitle in subtitles:
+    trans_subtitles = []
+    for i, subtitle in enumerate(subtitles):
         # 获取字幕文本 判断是否为空
         if not subtitle['text']:
+            trans_subtitles.append(subtitle)
             continue
-        messages = [{ "content": f"请将以下用户发送的文本翻译成{full_lang}。请勿返回任何解释、说明或额外信息，只返回翻译后的文本。","role": "system"},{ "content": subtitle['text'],"role": "user"}]
+        
+        # 获取上下文
+        prev_subtitle = subtitles[i - 1]['text'] if i > 0 else ""
+        next_subtitle = subtitles[i + 1]['text'] if i < len(subtitles) - 1 else ""
+        
+        # 构建上下文提示词
+        context = ""
+        if prev_subtitle:
+            context += f"前一句字幕: {prev_subtitle}\n"
+        if next_subtitle:
+            context += f"后一句字幕: {next_subtitle}\n"
+        
+        messages = [
+            {
+                "content": f"你是一个专业的字幕翻译员，你的任务是将用户提供的字幕翻译成{full_lang}。请基于上下文信息，修复可能存在的错误或不准确之处，确保翻译自然流畅，符合口语习惯。请勿返回任何解释、说明或额外信息，只返回翻译后的文本。",
+                "role": "system"
+            },
+            {
+                "content": f"{context}需要翻译的字幕: {subtitle['text']}",
+                "role": "user"
+            }
+        ]
+        print(f"messages: {messages}")
         trans_text = llm_completion(messages)
         print(f"{subtitle['text']} -> {trans_text}")
         # TODO 这里需要评测翻译结果，如果翻译结果不符合预期，可以调用其他翻译 API
         # 翻译成功，替换原始文本
         trans_text = format_subtitle_text(trans_text)
         if trans_text and trans_text != subtitle['text']:
-            subtitle['text'] = trans_text
-            print(f"翻译成功: {subtitle['text']}")
+            trans_subtitle = copy.deepcopy(subtitle)
+            trans_subtitle['text'] = trans_text
+            print(f"翻译成功-{subtitle['sequence_number']}: {trans_subtitle['text']}")
             success_count += 1
+            trans_subtitles.append(trans_subtitle)
         else:
             # 翻译失败，保留原始文本
-            print(f"翻译失败: {subtitle['text']}")
+            print(f"翻译失败-{subtitle['sequence_number']}: {subtitle['text']}")
             failed_count += 1
+            trans_subtitles.append(subtitle)
+            
     print(f"翻译完成，失败次数: {failed_count}")
     failed_rate = failed_count / (failed_count + success_count) * 100
     end_time = time.time()
@@ -105,7 +137,7 @@ def translate_subtitle(subtitle_file, lang = DEFAULT_LANG):
         return
     # 将翻译后的字幕写入新的 SRT 文件
     translated_subtitle_file = subtitle_file.replace('.srt', f'_{lang}.srt')
-    array_to_srt(subtitles, translated_subtitle_file)
+    array_to_srt(trans_subtitles, translated_subtitle_file)
     
 
 if __name__ == '__main__':
