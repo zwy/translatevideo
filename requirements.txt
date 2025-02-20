@@ -3,3 +3,4 @@ openai-whisper
 requests
 litellm
 pydub
+shutil

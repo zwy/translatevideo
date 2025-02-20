@@ -1,5 +1,5 @@
 LANG_DICT = {
-    "zh": "chinese",
+    "zh": "Chinese",
     "en": "english",
     "ja": "japanese",
 }

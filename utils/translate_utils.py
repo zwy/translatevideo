@@ -61,6 +61,8 @@ def array_to_srt(subtitle_array: list, subtitle_file: str):
             file.write('\n')  # 用空行分隔字幕
 
 def format_subtitle_text(text):
+    if not text:
+        return text
     # 去掉<think>标签
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
     # 去除多余的空格和换行符
@@ -71,7 +73,7 @@ def format_subtitle_text(text):
     text = text.replace('\n', ' ')
     return text
 
-def translate_subtitle(subtitle_file, lang = DEFAULT_LANG):
+def translate_subtitle(subtitle_file, lang = DEFAULT_LANG, translated_subtitle_file = None):
     start_time = time.time()
     # 获取语言全称
     full_lang = config.LANG_DICT.get(lang)
@@ -136,7 +138,6 @@ def translate_subtitle(subtitle_file, lang = DEFAULT_LANG):
         print(f"翻译失败率超过10%，请检查翻译结果，没有保存翻译后的字幕文件")
         return
     # 将翻译后的字幕写入新的 SRT 文件
-    translated_subtitle_file = subtitle_file.replace('.srt', f'_{lang}.srt')
     array_to_srt(trans_subtitles, translated_subtitle_file)
     
 
